@@ -1,5 +1,7 @@
 package ge.cleaninghouse.quest.ui.screens
 
+import ge.cleaninghouse.quest.ui.components.UpdateBanner
+import ge.cleaninghouse.quest.ui.UpdateState
 import ge.cleaninghouse.quest.ui.components.CoinBadge
 import ge.cleaninghouse.quest.data.titleIn
 import ge.cleaninghouse.quest.data.nameIn
@@ -97,6 +99,10 @@ fun HomeScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
                     Text("▾", color = Purple, fontSize = 18.sp)
                 }
             }
+        }
+
+        if (vm.update is UpdateState.Available || vm.update is UpdateState.Downloading || vm.update is UpdateState.Ready) {
+            item { UpdateBanner(vm.update) { vm.installUpdate() } }
         }
 
         item {

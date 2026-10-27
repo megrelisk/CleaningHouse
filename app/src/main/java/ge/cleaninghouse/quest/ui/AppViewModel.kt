@@ -21,6 +21,7 @@ import ge.cleaninghouse.quest.data.Redemption
 import ge.cleaninghouse.quest.data.Repository
 import ge.cleaninghouse.quest.data.Reward
 import ge.cleaninghouse.quest.data.Settings
+import ge.cleaninghouse.quest.data.Updater
 import ge.cleaninghouse.quest.data.Who
 import ge.cleaninghouse.quest.data.DEFAULT_MODEL
 import ge.cleaninghouse.quest.data.REWARDS_VERSION
@@ -42,6 +43,16 @@ sealed interface Screen {
     data object Store : Screen
     data object Settings : Screen
     data class Session(val id: String) : Screen
+}
+
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data object UpToDate : UpdateState
+    data class Available(val release: Updater.Release) : UpdateState
+    data class Downloading(val release: Updater.Release, val progress: Float) : UpdateState
+    data class Ready(val release: Updater.Release, val file: File) : UpdateState
+    data class Failed(val message: String) : UpdateState
 }
 
 sealed interface Analysis {
@@ -73,6 +84,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var celebration by mutableStateOf<Celebration?>(null)
 
     private var analysisJob: Job? = null
+
+    var update by mutableStateOf<UpdateState>(UpdateState.Idle)
+        private set
+    val installedBuild: Int = runCatching { Updater.installedBuild(app) }.getOrDefault(0)
+
+    init {
+        checkForUpdate(silent = true)
+    }
 
     val captureDir: File get() = File(getApplication<Application>().cacheDir, "capture").apply { mkdirs() }
 
@@ -326,6 +345,51 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissAnalysisError() {
         analysis = Analysis.Idle
+    }
+
+    // --- App updates ---
+
+    fun checkForUpdate(silent: Boolean = false) {
+        if (update is UpdateState.Checking || update is UpdateState.Downloading) return
+        update = UpdateState.Checking
+        viewModelScope.launch {
+            update = try {
+                Updater.findUpdate(getApplication())?.let { UpdateState.Available(it) } ?: UpdateState.UpToDate
+            } catch (e: Exception) {
+                if (silent) UpdateState.Idle else UpdateState.Failed(e.message ?: e.toString())
+            }
+        }
+    }
+
+    /** Downloads the new APK (if needed) and opens the system installer. */
+    fun installUpdate() {
+        val app = getApplication<Application>()
+        when (val u = update) {
+            is UpdateState.Ready -> launchInstaller(u.file)
+            is UpdateState.Available -> viewModelScope.launch {
+                update = UpdateState.Downloading(u.release, 0f)
+                try {
+                    var shown = 0
+                    val file = Updater.download(app, u.release) { p ->
+                        val percent = (p * 100).toInt()
+                        if (percent != shown) {
+                            shown = percent
+                            update = UpdateState.Downloading(u.release, p) // snapshot state is thread-safe
+                        }
+                    }
+                    update = UpdateState.Ready(u.release, file)
+                    launchInstaller(file)
+                } catch (e: Exception) {
+                    update = UpdateState.Failed(e.message ?: e.toString())
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    private fun launchInstaller(file: File) {
+        val app = getApplication<Application>()
+        if (Updater.canInstall(app)) Updater.install(app, file) else Updater.openInstallPermission(app)
     }
 
     // --- Rewards ---

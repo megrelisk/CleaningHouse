@@ -1,5 +1,7 @@
 package ge.cleaninghouse.quest.ui.screens
 
+import ge.cleaninghouse.quest.ui.components.UpdateBanner
+import ge.cleaninghouse.quest.ui.UpdateState
 import ge.cleaninghouse.quest.ui.LocalKa
 import ge.cleaninghouse.quest.data.nameIn
 import androidx.compose.foundation.background
@@ -111,6 +113,30 @@ fun SettingsScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
                 )
                 TextButton(onClick = { uri.openUri("https://aistudio.google.com/apikey") }) {
                     Text(tr("Open Google AI Studio ↗", "Google AI Studio-ს გახსნა ↗"))
+                }
+            }
+        }
+
+        item {
+            SettingsCard(tr("📲 App updates", "📲 აპის განახლება")) {
+                Text(tr("Installed: build ${vm.installedBuild}", "დაყენებულია: build ${vm.installedBuild}"), color = Muted, fontSize = 13.sp)
+                when (val u = vm.update) {
+                    is UpdateState.Available, is UpdateState.Downloading, is UpdateState.Ready ->
+                        UpdateBanner(u) { vm.installUpdate() }
+                    else -> {
+                        Text(
+                            when (u) {
+                                UpdateState.Checking -> tr("Checking…", "მოწმდება…")
+                                UpdateState.UpToDate -> tr("✅ You have the latest version", "✅ უახლესი ვერსია გაქვს")
+                                is UpdateState.Failed -> tr("Couldn't check: ${u.message}", "შემოწმება ვერ მოხერხდა: ${u.message}")
+                                else -> tr("New versions are checked every time the app opens.", "ახალი ვერსია მოწმდება აპის ყოველ გახსნაზე.")
+                            },
+                            fontSize = 13.sp,
+                        )
+                        OutlinedButton(onClick = { vm.checkForUpdate() }, enabled = u != UpdateState.Checking) {
+                            Text(tr("Check for updates", "განახლების შემოწმება"))
+                        }
+                    }
                 }
             }
         }
