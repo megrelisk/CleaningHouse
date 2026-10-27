@@ -1,5 +1,10 @@
 package ge.cleaninghouse.quest.ui.screens
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import ge.cleaninghouse.quest.ui.LocalKa
+import ge.cleaninghouse.quest.data.titleIn
+import ge.cleaninghouse.quest.data.nameIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -55,6 +60,7 @@ import ge.cleaninghouse.quest.ui.tr
 fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
     val project = state.currentProject ?: return
     val s = state.settings
+    val ka = LocalKa.current
     var buying by remember { mutableStateOf<Reward?>(null) }
     var deleting by remember { mutableStateOf<Reward?>(null) }
     var adding by remember { mutableStateOf(false) }
@@ -83,13 +89,13 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
                     Avatar(s.playerA, 44.dp)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(s.playerA.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(s.playerA.nameIn(ka), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         CoinBadge(project.coinsA)
                     }
                     Avatar(s.playerB, 44.dp)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(s.playerB.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(s.playerB.nameIn(ka), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         CoinBadge(project.coinsB)
                     }
                 }
@@ -103,9 +109,9 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
             }
         }
         items(project.rewards.chunked(2)) { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.height(IntrinsicSize.Max), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { r ->
-                    RewardCard(r, Modifier.weight(1f), onBuy = { buying = r }, onLongDelete = { deleting = r })
+                    RewardCard(r, ka, Modifier.weight(1f).fillMaxHeight(), onBuy = { buying = r }, onLongDelete = { deleting = r })
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
@@ -114,8 +120,8 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
         if (project.redemptions.isNotEmpty()) {
             item { SectionTitle(tr("📜 Owed perks", "📜 ვალში მყოფი ჯილდოები")) }
             items(project.redemptions, key = { it.id }) { r ->
-                val buyer = if (r.buyer == Who.A) s.playerA.name else s.playerB.name
-                val giver = if (r.buyer == Who.A) s.playerB.name else s.playerA.name
+                val buyer = if (r.buyer == Who.A) s.playerA.nameIn(ka) else s.playerB.nameIn(ka)
+                val giver = if (r.buyer == Who.A) s.playerB.nameIn(ka) else s.playerA.nameIn(ka)
                 Card(
                     Modifier
                         .fillMaxWidth()
@@ -128,7 +134,7 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
-                                r.title, fontWeight = FontWeight.Bold,
+                                r.titleIn(ka), fontWeight = FontWeight.Bold,
                                 textDecoration = if (r.fulfilled) TextDecoration.LineThrough else null,
                             )
                             Text(
@@ -146,7 +152,7 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
     buying?.let { r ->
         AlertDialog(
             onDismissRequest = { buying = null },
-            title = { Text("${r.emoji} ${r.title}") },
+            title = { Text("${r.emoji} ${r.titleIn(ka)}") },
             text = {
                 Column {
                     Text(tr("Who is spending ${r.cost} 🪙?", "ვინ ხარჯავს ${r.cost} 🪙-ს?"))
@@ -169,7 +175,7 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
                                 horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
                                 Avatar(p, 56.dp)
-                                Text(p.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(p.nameIn(ka), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     if (ok) "🪙 $coins" else tr("needs ${r.cost - coins} more", "აკლია ${r.cost - coins}"),
                                     fontSize = 12.sp, color = if (ok) Muted else Coral, textAlign = TextAlign.Center,
@@ -187,7 +193,7 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
         AlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text(tr("Remove reward?", "წავშალოთ ჯილდო?")) },
-            text = { Text("${r.emoji} ${r.title}") },
+            text = { Text("${r.emoji} ${r.titleIn(ka)}") },
             confirmButton = { TextButton(onClick = { vm.deleteReward(r.id); deleting = null }) { Text(tr("Remove", "წაშლა")) } },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(tr("Cancel", "გაუქმება")) } },
         )
@@ -232,23 +238,21 @@ fun StoreScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
 }
 
 @Composable
-private fun RewardCard(r: Reward, modifier: Modifier, onBuy: () -> Unit, onLongDelete: () -> Unit) {
+private fun RewardCard(r: Reward, ka: Boolean, modifier: Modifier, onBuy: () -> Unit, onLongDelete: () -> Unit) {
     Card(
         modifier,
         colors = CardDefaults.cardColors(containerColor = Color.White),
         shape = MaterialTheme.shapes.large,
         elevation = CardDefaults.cardElevation(2.dp),
     ) {
-        Column(Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.fillMaxHeight().padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Text("✕", Modifier.clickable(onClick = onLongDelete).padding(2.dp), color = Muted, fontSize = 12.sp)
             }
             Text(r.emoji, fontSize = 40.sp)
             Spacer(Modifier.height(6.dp))
-            Text(
-                r.title, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.height(44.dp),
-            )
+            Text(r.titleIn(ka), fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+            Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(8.dp))
             Text(
                 "🪙 ${r.cost}",

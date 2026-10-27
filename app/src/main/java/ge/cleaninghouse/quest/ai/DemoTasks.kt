@@ -32,21 +32,24 @@ object DemoTasks {
         D("Clean the window glass", "ფანჯრის მინის გაწმენდა", "Spray and wipe in circles.", "მოასხი და წრიულად მოწმინდე.", 6, "windows", "🪟"),
     )
 
-    fun generate(count: Int?, ka: Boolean): AiResult {
+    fun generate(count: Int?): AiResult {
         val n = (count ?: (6..12).random()).coerceAtMost(pool.size)
         val tasks = pool.shuffled().take(n).sortedBy { it.min }.map {
             AiTask(
-                title = if (ka) it.ka else it.en,
-                description = if (ka) it.dKa else it.dEn,
+                titleKa = it.ka,
+                titleEn = it.en,
+                descriptionKa = it.dKa,
+                descriptionEn = it.dEn,
                 minutes = it.min,
                 category = it.cat,
                 emoji = it.emoji,
             )
         }
         return AiResult(
-            room = if (ka) "დემო ოთახი" else "Demo room",
-            summary = if (ka) "დემო რეჟიმი: დაამატე Gemini API გასაღები პარამეტრებში, რომ AI-მ ვიდეო გააანალიზოს."
-            else "Demo mode: add a Gemini API key in Settings so the AI can analyze your video.",
+            roomKa = "დემო ოთახი",
+            roomEn = "Demo room",
+            summaryKa = "დემო რეჟიმი: დაამატე Gemini API გასაღები პარამეტრებში, რომ AI-მ ვიდეო გააანალიზოს.",
+            summaryEn = "Demo mode: add a Gemini API key in Settings so the AI can analyze your video.",
             tasks = tasks,
         )
     }

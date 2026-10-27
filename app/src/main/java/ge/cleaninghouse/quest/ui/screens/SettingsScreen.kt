@@ -1,5 +1,7 @@
 package ge.cleaninghouse.quest.ui.screens
 
+import ge.cleaninghouse.quest.ui.LocalKa
+import ge.cleaninghouse.quest.data.nameIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,11 +57,12 @@ private val shirtColors = listOf(0xFF2979FF, 0xFFE91E63, 0xFF14C8A8, 0xFFFF7A59,
 @Composable
 fun SettingsScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
     val s = state.settings
+    val ka = LocalKa.current
     val project = state.currentProject ?: return
     val uri = LocalUriHandler.current
     var showKey by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf<String?>(null) }
-    var projectName by remember(project.id) { mutableStateOf(project.name) }
+    var projectName by remember(project.id, ka) { mutableStateOf(project.nameIn(ka)) }
     var projectEmoji by remember(project.id) { mutableStateOf(project.emoji) }
 
     LazyColumn(
@@ -74,15 +77,9 @@ fun SettingsScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
 
         item {
             SettingsCard(tr("Language", "ენა")) {
-                Text(tr("App", "აპლიკაცია"), color = Muted, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(s.uiLang == "ka", { vm.updateSettings { it.copy(uiLang = "ka") } }, { Text("ქართული") })
                     FilterChip(s.uiLang == "en", { vm.updateSettings { it.copy(uiLang = "en") } }, { Text("English") })
-                }
-                Text(tr("AI quests", "AI ქვესტები"), color = Muted, fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(s.aiLang == "ka", { vm.updateSettings { it.copy(aiLang = "ka") } }, { Text("ქართული") })
-                    FilterChip(s.aiLang == "en", { vm.updateSettings { it.copy(aiLang = "en") } }, { Text("English") })
                 }
             }
         }
@@ -120,9 +117,9 @@ fun SettingsScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
 
         item {
             SettingsCard(tr("🎮 Players", "🎮 მოთამაშეები")) {
-                PlayerEditor(s.playerA) { p -> vm.updateSettings { it.copy(playerA = p) } }
+                PlayerEditor(s.playerA, ka) { p -> vm.updateSettings { it.copy(playerA = p) } }
                 Spacer(Modifier.height(8.dp))
-                PlayerEditor(s.playerB) { p -> vm.updateSettings { it.copy(playerB = p) } }
+                PlayerEditor(s.playerB, ka) { p -> vm.updateSettings { it.copy(playerB = p) } }
             }
         }
 
@@ -156,7 +153,7 @@ fun SettingsScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
             onDismissRequest = { confirm = null },
             title = {
                 Text(
-                    if (what == "delete") tr("Delete \"${project.name}\"?", "წავშალოთ \"${project.name}\"?")
+                    if (what == "delete") tr("Delete \"${project.nameIn(ka)}\"?", "წავშალოთ \"${project.nameIn(ka)}\"?")
                     else tr("Reset all progress?", "განვანულოთ პროგრესი?")
                 )
             },
@@ -187,12 +184,15 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun PlayerEditor(p: PlayerProfile, onChange: (PlayerProfile) -> Unit) {
+private fun PlayerEditor(p: PlayerProfile, ka: Boolean, onChange: (PlayerProfile) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Avatar(p, 72.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(p.name, { onChange(p.copy(name = it.take(20))) }, singleLine = true, label = { Text(tr("Name", "სახელი")) })
+            OutlinedTextField(
+                p.name, { onChange(p.copy(name = it.take(20))) }, singleLine = true,
+                label = { Text(tr("Name", "სახელი")) }, placeholder = { Text(p.nameIn(ka)) },
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(p.isMale, { onChange(p.copy(isMale = true)) }, { Text(tr("👦 Boy", "👦 ბიჭი")) })
                 FilterChip(!p.isMale, { onChange(p.copy(isMale = false)) }, { Text(tr("👧 Girl", "👧 გოგო")) })

@@ -1,5 +1,6 @@
 package ge.cleaninghouse.quest.ui.components
 
+import ge.cleaninghouse.quest.data.nameIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -120,7 +121,7 @@ fun PlayerCard(profile: PlayerProfile, xp: Int, coins: Int, modifier: Modifier =
         Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Avatar(profile, 76.dp)
             Spacer(Modifier.height(6.dp))
-            Text(profile.name, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(profile.nameIn(ka), fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 "Lv ${info.level} · ${Game.title(info.level, ka)}",
                 color = Purple, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
@@ -164,6 +165,8 @@ fun WhoPickerDialog(
     onDismiss: () -> Unit,
     onPick: (Who) -> Unit,
 ) {
+    val ka = LocalKa.current
+    val coins = Game.coinsFor(xp)
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = MaterialTheme.shapes.large, color = Color.White) {
             Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -172,10 +175,10 @@ fun WhoPickerDialog(
                 Text(title, color = Muted, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    WhoOption(Modifier.weight(1f), settings.playerA.name, "+$xp XP", onClick = { onPick(Who.A) }) {
+                    WhoOption(Modifier.weight(1f), settings.playerA.nameIn(ka), "+$xp XP · +$coins 🪙", onClick = { onPick(Who.A) }) {
                         Avatar(settings.playerA, 72.dp)
                     }
-                    WhoOption(Modifier.weight(1f), settings.playerB.name, "+$xp XP", onClick = { onPick(Who.B) }) {
+                    WhoOption(Modifier.weight(1f), settings.playerB.nameIn(ka), "+$xp XP · +$coins 🪙", onClick = { onPick(Who.B) }) {
                         Avatar(settings.playerB, 72.dp)
                     }
                 }
@@ -183,7 +186,7 @@ fun WhoPickerDialog(
                 WhoOption(
                     Modifier.fillMaxWidth(),
                     tr("Together 🤝", "ერთად 🤝"),
-                    tr("+${Game.coopShare(xp)} XP each · team bonus", "+${Game.coopShare(xp)} XP თითოეულს · გუნდური ბონუსი"),
+                    tr("+${Game.coopShare(xp)} XP · +${Game.coopShare(coins)} 🪙 each · team bonus", "+${Game.coopShare(xp)} XP · +${Game.coopShare(coins)} 🪙 თითოეულს · გუნდური ბონუსი"),
                     onClick = { onPick(Who.BOTH) },
                 ) {
                     DuoAvatar(settings.playerA, settings.playerB, 64.dp)
@@ -251,8 +254,8 @@ fun CelebrationOverlay(c: Celebration, settings: Settings, onDone: () -> Unit) {
                 }
                 Spacer(Modifier.height(12.dp))
                 val name = when (c.who) {
-                    Who.A -> settings.playerA.name
-                    Who.B -> settings.playerB.name
+                    Who.A -> settings.playerA.nameIn(ka)
+                    Who.B -> settings.playerB.nameIn(ka)
                     Who.BOTH -> if (ka) "გუნდი" else "Team"
                 }
                 Text(
@@ -269,8 +272,8 @@ fun CelebrationOverlay(c: Celebration, settings: Settings, onDone: () -> Unit) {
                     )
                     CoinBadge(c.coins)
                 }
-                c.levelUpA?.let { LevelUpLine("${settings.playerA.name}: Lv $it · ${Game.title(it, ka)}") }
-                c.levelUpB?.let { LevelUpLine("${settings.playerB.name}: Lv $it · ${Game.title(it, ka)}") }
+                c.levelUpA?.let { LevelUpLine("${settings.playerA.nameIn(ka)}: Lv $it · ${Game.title(it, ka)}") }
+                c.levelUpB?.let { LevelUpLine("${settings.playerB.nameIn(ka)}: Lv $it · ${Game.title(it, ka)}") }
                 c.houseLevelUp?.let { LevelUpLine("🏡 ${tr("House", "სახლი")} Lv $it · ${Game.houseTitle(it, ka)}") }
             }
         }
@@ -281,7 +284,7 @@ fun CelebrationOverlay(c: Celebration, settings: Settings, onDone: () -> Unit) {
 private fun LevelUpLine(text: String) {
     Spacer(Modifier.height(10.dp))
     Text(
-        "⬆️ LEVEL UP! $text",
+        tr("⬆️ LEVEL UP! ", "⬆️ ახალი დონე! ") + text,
         Modifier
             .clip(CircleShape)
             .background(HeroGradient)

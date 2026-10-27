@@ -17,14 +17,16 @@ data class PlayerProfile(
     val shirtColor: Long,
 )
 
+const val DEFAULT_MODEL = "gemini-3.8-flash"
+
 @Serializable
 data class Settings(
     val apiKey: String = "",
-    val model: String = "gemini-2.5-flash",
+    val model: String = DEFAULT_MODEL,
     val uiLang: String = "ka",
     val aiLang: String = "ka",
-    val playerA: PlayerProfile = PlayerProfile("ბიჭი", true, 0xFF4E342E, 0xFF2979FF),
-    val playerB: PlayerProfile = PlayerProfile("გოგო", false, 0xFFE65100, 0xFFE91E63),
+    val playerA: PlayerProfile = PlayerProfile("", true, 0xFF4E342E, 0xFF2979FF),
+    val playerB: PlayerProfile = PlayerProfile("", false, 0xFFE65100, 0xFFE91E63),
 )
 
 @Serializable
@@ -32,6 +34,8 @@ data class QuestTask(
     val id: String = newId(),
     val title: String,
     val description: String = "",
+    val titleEn: String = "",
+    val descriptionEn: String = "",
     val minutes: Int,
     val xp: Int,
     val category: String = "other",
@@ -46,6 +50,8 @@ data class CleaningSession(
     val createdAt: Long = System.currentTimeMillis(),
     val title: String,
     val summary: String = "",
+    val titleEn: String = "",
+    val summaryEn: String = "",
     val fromAi: Boolean = false,
     val tasks: List<QuestTask>,
 ) {
@@ -59,6 +65,7 @@ data class Reward(
     val title: String,
     val emoji: String,
     val cost: Int,
+    val key: String? = null,
 )
 
 /** [buyer] spent coins; the other player owes them the perk until [fulfilled]. */
@@ -69,6 +76,7 @@ data class Redemption(
     val emoji: String,
     val cost: Int,
     val buyer: Who,
+    val key: String? = null,
     val at: Long = System.currentTimeMillis(),
     val fulfilled: Boolean = false,
 )
@@ -86,6 +94,7 @@ data class Project(
     val sessions: List<CleaningSession> = emptyList(),
     val rewards: List<Reward> = emptyList(),
     val redemptions: List<Redemption> = emptyList(),
+    val rewardsVersion: Int = 0,
 )
 
 @Serializable
@@ -97,11 +106,28 @@ data class AppState(
     val currentProject: Project? get() = projects.firstOrNull { it.id == currentProjectId } ?: projects.firstOrNull()
 }
 
-fun defaultRewards(ka: Boolean): List<Reward> = listOf(
-    Reward(title = if (ka) "მეორემ მიყიდოს კოკა-კოლა" else "Buy me a Coca-Cola", emoji = "🥤", cost = 50),
-    Reward(title = if (ka) "10 წუთიანი ფეხის მასაჟი" else "10-minute foot massage", emoji = "💆", cost = 120),
-    Reward(title = if (ka) "მე ვირჩევ დღევანდელ ფილმს" else "I pick tonight's movie", emoji = "🎬", cost = 80),
-    Reward(title = if (ka) "საუზმე საწოლში" else "Breakfast in bed", emoji = "🥞", cost = 200),
-    Reward(title = if (ka) "ერთი საქმის გამოტოვება" else "Skip one chore", emoji = "🛋️", cost = 150),
-    Reward(title = if (ka) "შოკოლადი ან ნაყინი" else "Chocolate or ice cream", emoji = "🍫", cost = 60),
-)
+const val REWARDS_VERSION = 2
+
+/** Text in the requested language, falling back to whichever one exists. */
+fun pick(ka: Boolean, kaText: String, enText: String): String =
+    if (ka) kaText.ifBlank { enText } else enText.ifBlank { kaText }
+
+fun QuestTask.titleIn(ka: Boolean) = pick(ka, title, titleEn)
+fun QuestTask.descriptionIn(ka: Boolean) = pick(ka, description, descriptionEn)
+fun CleaningSession.titleIn(ka: Boolean) = pick(ka, title, titleEn)
+fun CleaningSession.summaryIn(ka: Boolean) = pick(ka, summary, summaryEn)
+fun Reward.titleIn(ka: Boolean) = RewardCatalog.title(key, title, ka)
+fun Redemption.titleIn(ka: Boolean) = RewardCatalog.title(key, title, ka)
+
+private val defaultProjectNames = setOf("მთავარი ბინა", "Main apartment")
+fun Project.nameIn(ka: Boolean) =
+    if (name in defaultProjectNames) (if (ka) "მთავარი ბინა" else "Main apartment") else name
+
+fun PlayerProfile.nameIn(ka: Boolean) = name.ifBlank {
+    when {
+        isMale && ka -> "ბიჭი"
+        isMale -> "Boy"
+        ka -> "გოგო"
+        else -> "Girl"
+    }
+}

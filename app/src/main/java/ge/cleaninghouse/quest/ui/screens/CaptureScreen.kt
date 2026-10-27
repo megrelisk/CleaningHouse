@@ -192,7 +192,7 @@ fun CaptureScreen(state: AppState, vm: AppViewModel) {
                             video?.takeIf { it != file }?.delete()
                             video = file
                         } else {
-                            cameraError = "Recording failed (${event.error})"
+                            cameraError = (if (ka) "ჩაწერა ვერ მოხერხდა" else "Recording failed") + " (${event.error})"
                         }
                     }
                     else -> Unit

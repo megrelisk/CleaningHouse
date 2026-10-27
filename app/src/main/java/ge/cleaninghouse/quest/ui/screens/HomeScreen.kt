@@ -1,5 +1,8 @@
 package ge.cleaninghouse.quest.ui.screens
 
+import ge.cleaninghouse.quest.ui.components.CoinBadge
+import ge.cleaninghouse.quest.data.titleIn
+import ge.cleaninghouse.quest.data.nameIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -88,7 +91,7 @@ fun HomeScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
                     Text(project.emoji, fontSize = 22.sp)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        project.name, Modifier.weight(1f), fontWeight = FontWeight.ExtraBold, fontSize = 18.sp,
+                        project.nameIn(ka), Modifier.weight(1f), fontWeight = FontWeight.ExtraBold, fontSize = 18.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     Text("▾", color = Purple, fontSize = 18.sp)
@@ -129,7 +132,7 @@ fun HomeScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
                     val doneB = allTasks.count { it.doneBy == Who.B }
                     val doneBoth = allTasks.count { it.doneBy == Who.BOTH }
                     Text(
-                        "✅ ${settings.playerA.name}: $doneA   ·   ${settings.playerB.name}: $doneB   ·   🤝 $doneBoth",
+                        "✅ ${settings.playerA.nameIn(ka)}: $doneA   ·   ${settings.playerB.nameIn(ka)}: $doneB   ·   🤝 $doneBoth",
                         color = Muted, fontSize = 12.sp,
                     )
                 }
@@ -143,6 +146,41 @@ fun HomeScreen(state: AppState, vm: AppViewModel, padding: PaddingValues) {
             ) { vm.screen = Screen.Capture }
             TextButton(onClick = { showNewSession = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(tr("+ Create a quest list manually", "+ ქვესტების სიის ხელით შექმნა"))
+            }
+        }
+
+        if (project.rewards.isNotEmpty()) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle(tr("🎁 Rewards to aim for", "🎁 ჯილდოები, რისთვისაც ღირს"), Modifier.weight(1f))
+                    TextButton(onClick = { vm.screen = Screen.Store }) { Text(tr("All →", "ყველა →")) }
+                }
+            }
+            item {
+                val richest = maxOf(project.coinsA, project.coinsB)
+                val goals = project.rewards.sortedBy { it.cost }.let { sorted ->
+                    val next = sorted.indexOfFirst { it.cost > richest }.let { if (it < 0) sorted.size else it }
+                    sorted.drop((next - 1).coerceAtLeast(0)).take(4).ifEmpty { sorted.takeLast(4) }
+                }
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = MaterialTheme.shapes.large) {
+                    Column(Modifier.padding(vertical = 6.dp)) {
+                        goals.forEach { r ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { vm.screen = Screen.Store }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(r.emoji, fontSize = 26.sp)
+                                Spacer(Modifier.width(12.dp))
+                                Text(r.titleIn(ka), Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.width(8.dp))
+                                CoinBadge(r.cost)
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -206,7 +244,7 @@ private fun SessionCard(s: CleaningSession, onClick: () -> Unit) {
                 Text(if (s.isComplete) "🏆" else if (s.fromAi) "✨" else "📝", fontSize = 24.sp)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(s.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(s.titleIn(ka), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(fmt.format(Date(s.createdAt)), color = Muted, fontSize = 12.sp)
                 }
                 Text("${s.doneCount}/${s.tasks.size}", fontWeight = FontWeight.ExtraBold, color = Purple)
@@ -216,8 +254,8 @@ private fun SessionCard(s: CleaningSession, onClick: () -> Unit) {
             if (left.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    if (ka) "დარჩა ~${left.sumOf { it.minutes }} წთ · ${left.sumOf { it.xp }} XP"
-                    else "~${left.sumOf { it.minutes }} min left · ${left.sumOf { it.xp }} XP to earn",
+                    if (ka) "დარჩა ~${left.sumOf { it.minutes }} წთ · ${left.sumOf { it.xp }} XP · ${left.sumOf { Game.coinsFor(it.xp) }} 🪙"
+                    else "~${left.sumOf { it.minutes }} min left · ${left.sumOf { it.xp }} XP · ${left.sumOf { Game.coinsFor(it.xp) }} 🪙 to earn",
                     color = Muted, fontSize = 12.sp,
                 )
             }
@@ -227,6 +265,7 @@ private fun SessionCard(s: CleaningSession, onClick: () -> Unit) {
 
 @Composable
 private fun ProjectsDialog(state: AppState, vm: AppViewModel, onDismiss: () -> Unit) {
+    val ka = LocalKa.current
     var creating by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
     var emoji by remember { mutableStateOf("🏡") }
@@ -270,7 +309,7 @@ private fun ProjectsDialog(state: AppState, vm: AppViewModel, onDismiss: () -> U
                             Text(p.emoji, fontSize = 22.sp)
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(p.name, fontWeight = FontWeight.Bold)
+                                Text(p.nameIn(ka), fontWeight = FontWeight.Bold)
                                 Text(
                                     "🏡 Lv ${Game.houseLevel(p.xpA + p.xpB).level} · ${p.sessions.size} " +
                                         tr("sessions", "სესია"),

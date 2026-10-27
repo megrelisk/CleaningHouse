@@ -2,6 +2,7 @@ package ge.cleaninghouse.quest.ai
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -21,8 +22,10 @@ import java.net.URL
 
 @Serializable
 data class AiTask(
-    val title: String,
-    val description: String = "",
+    @SerialName("title_ka") val titleKa: String = "",
+    @SerialName("title_en") val titleEn: String = "",
+    @SerialName("description_ka") val descriptionKa: String = "",
+    @SerialName("description_en") val descriptionEn: String = "",
     val minutes: Int = 5,
     val category: String = "other",
     val emoji: String = "",
@@ -30,17 +33,22 @@ data class AiTask(
 
 @Serializable
 data class AiResult(
-    val room: String = "",
-    val summary: String = "",
+    @SerialName("room_ka") val roomKa: String = "",
+    @SerialName("room_en") val roomEn: String = "",
+    @SerialName("summary_ka") val summaryKa: String = "",
+    @SerialName("summary_en") val summaryEn: String = "",
     val tasks: List<AiTask> = emptyList(),
 )
+
+/** The requested model doesn't exist (anymore); the caller may retry with another one. */
+class ModelUnavailableException(message: String) : IOException(message)
 
 val CATEGORIES = listOf(
     "dishes", "laundry", "bed", "floor", "vacuum", "dust", "surfaces", "tidy",
     "trash", "bathroom", "kitchen", "windows", "plants", "other",
 )
 
-class GeminiClient(private val apiKey: String, private val model: String) {
+class GeminiClient(private val apiKey: String) {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -49,31 +57,35 @@ class GeminiClient(private val apiKey: String, private val model: String) {
         {
           "type": "OBJECT",
           "properties": {
-            "room": {"type": "STRING"},
-            "summary": {"type": "STRING"},
+            "room_ka": {"type": "STRING"},
+            "room_en": {"type": "STRING"},
+            "summary_ka": {"type": "STRING"},
+            "summary_en": {"type": "STRING"},
             "tasks": {
               "type": "ARRAY",
               "items": {
                 "type": "OBJECT",
                 "properties": {
-                  "title": {"type": "STRING"},
-                  "description": {"type": "STRING"},
+                  "title_ka": {"type": "STRING"},
+                  "title_en": {"type": "STRING"},
+                  "description_ka": {"type": "STRING"},
+                  "description_en": {"type": "STRING"},
                   "minutes": {"type": "INTEGER"},
                   "category": {"type": "STRING", "enum": ${CATEGORIES.joinToString(",", "[", "]") { "\"$it\"" }}},
                   "emoji": {"type": "STRING"}
                 },
-                "required": ["title", "description", "minutes", "category", "emoji"],
-                "propertyOrdering": ["title", "description", "minutes", "category", "emoji"]
+                "required": ["title_ka", "title_en", "description_ka", "description_en", "minutes", "category", "emoji"],
+                "propertyOrdering": ["title_ka", "title_en", "description_ka", "description_en", "minutes", "category", "emoji"]
               }
             }
           },
-          "required": ["room", "summary", "tasks"],
-          "propertyOrdering": ["room", "summary", "tasks"]
+          "required": ["room_ka", "room_en", "summary_ka", "summary_en", "tasks"],
+          "propertyOrdering": ["room_ka", "room_en", "summary_ka", "summary_en", "tasks"]
         }
         """.trimIndent()
     )
 
-    suspend fun generateTasks(media: List<JsonObject>, prompt: String): AiResult = withContext(Dispatchers.IO) {
+    suspend fun generateTasks(model: String, media: List<JsonObject>, prompt: String): AiResult = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             putJsonArray("contents") {
                 addJsonObject {
@@ -106,6 +118,7 @@ class GeminiClient(private val apiKey: String, private val model: String) {
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (code == 404) throw ModelUnavailableException("Gemini HTTP 404: ${errorMessage(text)}")
             if (code !in 200..299) throw IOException("Gemini HTTP $code: ${errorMessage(text)}")
 
             val root = Json.parseToJsonElement(text).jsonObject
@@ -128,8 +141,7 @@ class GeminiClient(private val apiKey: String, private val model: String) {
     }.getOrNull() ?: text.take(300)
 }
 
-fun buildPrompt(count: Int?, ka: Boolean, hint: String): String {
-    val language = if (ka) "Georgian (ქართული ენა)" else "English"
+fun buildPrompt(count: Int?, hint: String): String {
     val amount = if (count == null) {
         "Decide the number of tasks yourself from how messy the space is: between 5 (almost clean) and 50 (very messy)."
     } else {
@@ -151,6 +163,6 @@ fun buildPrompt(count: Int?, ka: Boolean, hint: String): String {
         - Order tasks from quick wins to bigger jobs.
         - $amount
         - room: short name of the space. summary: one encouraging sentence about the state of the space.
-        - Write room, summary, title and description in $language.$extra
+        - Every text field comes in two languages: *_ka in natural Georgian (ქართული ენა) and *_en in English, with the same meaning.$extra
     """.trimIndent()
 }

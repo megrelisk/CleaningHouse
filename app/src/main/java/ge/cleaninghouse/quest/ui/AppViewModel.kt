@@ -10,6 +10,7 @@ import ge.cleaninghouse.quest.ai.AiResult
 import ge.cleaninghouse.quest.ai.DemoTasks
 import ge.cleaninghouse.quest.ai.GeminiClient
 import ge.cleaninghouse.quest.ai.MediaPrep
+import ge.cleaninghouse.quest.ai.ModelUnavailableException
 import ge.cleaninghouse.quest.ai.buildPrompt
 import ge.cleaninghouse.quest.data.AppState
 import ge.cleaninghouse.quest.data.CleaningSession
@@ -21,7 +22,9 @@ import ge.cleaninghouse.quest.data.Repository
 import ge.cleaninghouse.quest.data.Reward
 import ge.cleaninghouse.quest.data.Settings
 import ge.cleaninghouse.quest.data.Who
-import ge.cleaninghouse.quest.data.defaultRewards
+import ge.cleaninghouse.quest.data.DEFAULT_MODEL
+import ge.cleaninghouse.quest.data.REWARDS_VERSION
+import ge.cleaninghouse.quest.data.RewardCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,7 +64,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository(File(app.filesDir, "state.json"))
     private val saveLock = Mutex()
 
-    private val _state = MutableStateFlow(ensureProject(repo.load() ?: AppState()))
+    private val _state = MutableStateFlow(migrate(ensureProject(repo.load() ?: AppState())))
     val state: StateFlow<AppState> = _state
 
     var screen by mutableStateOf<Screen>(Screen.Home)
@@ -73,12 +76,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val captureDir: File get() = File(getApplication<Application>().cacheDir, "capture").apply { mkdirs() }
 
+    /** Brings state saved by older versions up to date. */
+    private fun migrate(s: AppState): AppState {
+        val ka = s.settings.uiLang == "ka"
+        val oldNames = setOf("ბიჭი", "გოგო")
+        val settings = s.settings.copy(
+            model = if (s.settings.model in setOf("gemini-2.5-flash", "")) DEFAULT_MODEL else s.settings.model,
+            playerA = s.settings.playerA.let { if (it.name in oldNames) it.copy(name = "") else it },
+            playerB = s.settings.playerB.let { if (it.name in oldNames) it.copy(name = "") else it },
+        )
+        val projects = s.projects.map { p ->
+            if (p.rewardsVersion >= REWARDS_VERSION) p
+            else p.copy(rewards = RewardCatalog.upgrade(p.rewards, ka), rewardsVersion = REWARDS_VERSION)
+        }
+        return s.copy(settings = settings, projects = projects)
+    }
+
     private fun ensureProject(s: AppState): AppState {
         if (s.projects.isNotEmpty()) {
             return if (s.currentProjectId == null) s.copy(currentProjectId = s.projects.first().id) else s
         }
         val ka = s.settings.uiLang == "ka"
-        val p = Project(name = if (ka) "მთავარი ბინა" else "Main apartment", emoji = "🏠", rewards = defaultRewards(ka))
+        val p = Project(
+            name = if (ka) "მთავარი ბინა" else "Main apartment", emoji = "🏠",
+            rewards = RewardCatalog.rewards(ka), rewardsVersion = REWARDS_VERSION,
+        )
         return s.copy(projects = listOf(p), currentProjectId = p.id)
     }
 
@@ -104,7 +126,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val p = Project(
             name = name.trim().ifEmpty { "🏠" },
             emoji = emoji.trim().ifEmpty { "🏠" },
-            rewards = defaultRewards(s.settings.uiLang == "ka"),
+            rewards = RewardCatalog.rewards(s.settings.uiLang == "ka"),
+            rewardsVersion = REWARDS_VERSION,
         )
         s.copy(projects = s.projects + p, currentProjectId = p.id)
     }
@@ -223,26 +246,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun analyze(video: File?, photos: List<File>, count: Int?, hint: String, demo: Boolean) {
         val settings = _state.value.settings
-        val ka = settings.aiLang == "ka"
+        val ka = settings.uiLang == "ka"
         analysisJob?.cancel()
         analysis = Analysis.Running
         analysisJob = viewModelScope.launch {
             try {
                 val result: AiResult = if (demo) {
                     kotlinx.coroutines.delay(1500)
-                    DemoTasks.generate(count, ka)
+                    DemoTasks.generate(count)
                 } else {
                     val parts = withContext(Dispatchers.Default) { MediaPrep.buildParts(video, photos) }
                     if (parts.isEmpty()) throw IllegalStateException(
                         if (settings.uiLang == "ka") "ჯერ ჩაწერე ვიდეო ან გადაიღე ფოტო." else "Record a video or take a photo first."
                     )
-                    GeminiClient(settings.apiKey, settings.model).generateTasks(parts, buildPrompt(count, ka, hint))
+                    generateWithFallback(settings.apiKey, settings.model, parts, buildPrompt(count, hint))
                 }
-                val tasks = result.tasks.filter { it.title.isNotBlank() }.map {
+                val tasks = result.tasks.filter { it.titleKa.isNotBlank() || it.titleEn.isNotBlank() }.map {
                     val minutes = it.minutes.coerceIn(1, 60)
                     QuestTask(
-                        title = it.title.trim(),
-                        description = it.description.trim(),
+                        title = it.titleKa.trim(),
+                        description = it.descriptionKa.trim(),
+                        titleEn = it.titleEn.trim(),
+                        descriptionEn = it.descriptionEn.trim(),
                         minutes = minutes,
                         xp = Game.xpFor(minutes),
                         category = it.category,
@@ -253,8 +278,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     if (settings.uiLang == "ka") "AI-მ დავალებები ვერ იპოვა. სცადე სხვა კადრი." else "The AI found no tasks. Try another recording."
                 )
                 val session = CleaningSession(
-                    title = result.room.ifBlank { hint }.ifBlank { if (ka) "დალაგება" else "Cleaning" },
-                    summary = result.summary,
+                    title = result.roomKa.ifBlank { hint }.ifBlank { "დალაგება" },
+                    titleEn = result.roomEn.ifBlank { hint }.ifBlank { "Cleaning" },
+                    summary = result.summaryKa,
+                    summaryEn = result.summaryEn,
                     fromAi = !demo,
                     tasks = tasks,
                 )
@@ -269,6 +296,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 analysis = Analysis.Failed(e.message ?: e.toString())
             }
         }
+    }
+
+    /** Tries the configured model, then newer defaults if Google has retired it. */
+    private suspend fun generateWithFallback(
+        apiKey: String,
+        model: String,
+        parts: List<kotlinx.serialization.json.JsonObject>,
+        prompt: String,
+    ): AiResult {
+        val client = GeminiClient(apiKey)
+        var lastError: Exception? = null
+        for (m in listOf(model, DEFAULT_MODEL, "gemini-flash-latest").filter { it.isNotBlank() }.distinct()) {
+            try {
+                val result = client.generateTasks(m, parts, prompt)
+                if (m != model) updateSettings { it.copy(model = m) }
+                return result
+            } catch (e: ModelUnavailableException) {
+                lastError = e
+            }
+        }
+        throw lastError ?: IllegalStateException("No model available")
     }
 
     fun cancelAnalysis() {
@@ -297,7 +345,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(
                 coinsA = if (buyer == Who.A) it.coinsA - reward.cost else it.coinsA,
                 coinsB = if (buyer == Who.B) it.coinsB - reward.cost else it.coinsB,
-                redemptions = listOf(Redemption(title = reward.title, emoji = reward.emoji, cost = reward.cost, buyer = buyer)) + it.redemptions,
+                redemptions = listOf(
+                    Redemption(title = reward.title, emoji = reward.emoji, cost = reward.cost, buyer = buyer, key = reward.key)
+                ) + it.redemptions,
             )
         }
         return true

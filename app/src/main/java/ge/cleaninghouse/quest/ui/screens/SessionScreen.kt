@@ -1,5 +1,9 @@
 package ge.cleaninghouse.quest.ui.screens
 
+import ge.cleaninghouse.quest.data.descriptionIn
+import ge.cleaninghouse.quest.data.summaryIn
+import ge.cleaninghouse.quest.data.titleIn
+import ge.cleaninghouse.quest.data.Game
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
@@ -114,7 +118,7 @@ fun SessionScreen(state: AppState, vm: AppViewModel, sessionId: String) {
         ) {
             TextButton(onClick = { vm.screen = Screen.Home }) { Text("←", fontSize = 22.sp) }
             Text(
-                session.title, Modifier.weight(1f), fontWeight = FontWeight.ExtraBold, fontSize = 20.sp,
+                session.titleIn(ka), Modifier.weight(1f), fontWeight = FontWeight.ExtraBold, fontSize = 20.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             TextButton(onClick = { confirmDelete = true }) { Text("🗑️", fontSize = 18.sp) }
@@ -130,8 +134,8 @@ fun SessionScreen(state: AppState, vm: AppViewModel, sessionId: String) {
                     shape = MaterialTheme.shapes.large,
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        if (session.summary.isNotBlank()) {
-                            Text(session.summary, color = Muted, fontSize = 13.sp)
+                        if (session.summaryIn(ka).isNotBlank()) {
+                            Text(session.summaryIn(ka), color = Muted, fontSize = 13.sp)
                             Spacer(Modifier.height(10.dp))
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -140,7 +144,8 @@ fun SessionScreen(state: AppState, vm: AppViewModel, sessionId: String) {
                                 fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
                             )
                             Text(
-                                if (ka) "⏱ ~${pending.sumOf { it.minutes }} წთ" else "⏱ ~${pending.sumOf { it.minutes }} min",
+                                (if (ka) "⏱ ~${pending.sumOf { it.minutes }} წთ" else "⏱ ~${pending.sumOf { it.minutes }} min") +
+                                    " · 🪙 ${pending.sumOf { Game.coinsFor(it.xp) }}",
                                 color = Muted, fontSize = 13.sp,
                             )
                         }
@@ -224,7 +229,7 @@ fun SessionScreen(state: AppState, vm: AppViewModel, sessionId: String) {
     }
 
     picking?.let { t ->
-        WhoPickerDialog(t.title, state.settings, t.xp, onDismiss = { picking = null }) { who ->
+        WhoPickerDialog(t.titleIn(ka), state.settings, t.xp, onDismiss = { picking = null }) { who ->
             picking = null
             vm.completeTask(session.id, t.id, who)
         }
@@ -333,18 +338,19 @@ private fun TaskCard(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        task.title,
+                        task.titleIn(ka),
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                         textDecoration = if (done) TextDecoration.LineThrough else null,
                     )
-                    if (task.description.isNotBlank()) {
-                        Text(task.description, color = Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (task.descriptionIn(ka).isNotBlank()) {
+                        Text(task.descriptionIn(ka), color = Muted, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Spacer(Modifier.height(6.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Pill(if (ka) "⏱ ${task.minutes} წთ" else "⏱ ${task.minutes} min")
                         Pill("⭐ ${task.xp} XP", bg = Color(0xFFE6E0FF), fg = Purple)
+                        Pill("🪙 ${Game.coinsFor(task.xp)}", bg = Color(0xFFFFF1CC), fg = Color(0xFFB7791F))
                     }
                 }
                 Spacer(Modifier.width(8.dp))
